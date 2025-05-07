@@ -122,7 +122,9 @@ impl FromStr for Color {
         );
 
         if s.starts_with('#') {
-            let rgba = Rgba::from_str(s).or_else(|_| Rgb::from_str(s).map(Into::into))?;
+            let rgba = Rgba::from_str(s)
+                .or_else(|_| Rgb::from_str(s).map(Into::into))
+                .map_err(|_| Error::FailedToParseColor(s.to_owned()))?;
 
             return Ok(Color::Rgba(rgba.into()));
         }
@@ -130,13 +132,17 @@ impl FromStr for Color {
         palette::named::from_str(s)
             .map(Srgb::into)
             .map(Color::Srgb)
-            .ok_or(Error::FailedToParseColor)
+            .ok_or_else(|| Error::FailedToParseColor(s.to_owned()))
     }
 }
 
 pub fn parse_params<T: FromStr, const N: usize>(text: &str) -> Result<[T; N]> {
-    let start = text.find("(").ok_or(Error::FailedToParseColor)?;
-    let end = text.find(")").ok_or(Error::FailedToParseColor)?;
+    let start = text
+        .find("(")
+        .ok_or_else(|| Error::FailedToParseColorParams(text.to_owned()))?;
+    let end = text
+        .find(")")
+        .ok_or_else(|| Error::FailedToParseColorParams(text.to_owned()))?;
 
     let result = text[start + 1..end]
         .split(",")
@@ -241,7 +247,6 @@ pub fn parse_format<'a>(src_color: &'a str, format: &'a str) -> Result<String> {
 
             Ok(color)
         }
-        _ => Ok(src_color.to_string()),
-        // _ => Err(Error::FailedToParseFormat),
+        _ => Err(Error::FailedToParseFormat(format.to_owned())),
     }
 }

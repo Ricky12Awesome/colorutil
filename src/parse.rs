@@ -1,21 +1,6 @@
 use crate::color::parse_format;
+use crate::config::Colors;
 use crate::{Error, Result};
-use derive_more::Deref;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[derive(Debug, Serialize, Deserialize, Deref)]
-pub struct Colors<'a> {
-    #[serde(flatten, borrow)]
-    colors: HashMap<&'a str, &'a str>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config<'a> {
-    prefix: &'a str,
-    suffix: &'a str,
-    colors: HashMap<&'a str, Colors<'a>>,
-}
 
 pub fn replace_colors<'a>(
     src: impl AsRef<str>,
@@ -33,10 +18,19 @@ pub fn replace_colors<'a>(
 
     while let Some(start) = src[offset..].find(prefix) {
         let start = offset + start;
-        let end = src[start..].find(suffix).ok_or(Error::FailedToParse)?;
+        let end = src[start..]
+            .find(suffix)
+            .ok_or_else(|| Error::FailedToFindSuffix(start))?;
+
         let value = &src[start + prefix.len()..start + end];
-        let (name, format) = value.split_once(":").ok_or(Error::FailedToParse)?;
-        let color = colors.get(name).ok_or(Error::FailedToParse)?;
+        let (name, format) = value
+            .split_once(":")
+            .ok_or_else(|| Error::FailedToParseValue(value.to_string()))?;
+
+        let color = colors
+            .get(name)
+            .ok_or_else(|| Error::FailedToGetColor(value.to_owned()))?;
+
         let color = parse_format(color, format)?;
 
         dst.push_str(&src[offset..start]);
@@ -51,12 +45,14 @@ pub fn replace_colors<'a>(
 
 #[test]
 fn test_replace_colors() {
+    use std::collections::HashMap;
+
     let prefix = "${";
     let suffix = "}";
     let colors = Colors {
         colors: HashMap::from_iter([
-            ("white", "#ffffff"),
-            ("black", "#000000"),
+            ("white", "white"),
+            ("black", "black"),
             ("transparent", "#00000000"),
             ("mid", "rgb(128, 128, 128)"),
             ("mid2", "frgb(0.5, 0.5, 0.5)"),
