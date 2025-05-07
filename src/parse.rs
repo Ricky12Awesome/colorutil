@@ -2,11 +2,11 @@ use crate::color::parse_format;
 use crate::config::Colors;
 use crate::{Error, Result};
 
-pub fn replace_colors<'a>(
+pub fn replace_colors(
     src: impl AsRef<str>,
     prefix: impl AsRef<str>,
     suffix: impl AsRef<str>,
-    colors: &'a Colors<'a>,
+    colors: &Colors,
 ) -> Result<String> {
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
@@ -50,20 +50,24 @@ fn test_replace_colors() {
     let prefix = "${";
     let suffix = "}";
     let colors = Colors {
-        colors: HashMap::from_iter([
-            ("white", "white"),
-            ("black", "black"),
-            ("transparent", "#00000000"),
-            ("mid", "rgb(128, 128, 128)"),
-            ("mid2", "frgb(0.5, 0.5, 0.5)"),
-            ("rgb", "rgb(1, 2, 3)"),
-            ("rgba", "rgba(1, 2, 3, 255)"),
-            ("argb", "argb(1, 2, 3, 255)"),
-            ("hsl", "hsl(360, 1.0, 0.5)"),
-            ("hsla", "hsla(360, 1.0, 0.5, 1.0)"),
-            ("hsv", "hsv(360, 1.0, 0.5)"),
-            ("hsva", "hsva(360, 1.0, 0.5, 1.0)"),
-        ]),
+        colors: HashMap::from_iter(
+            [
+                ("white", "white"),
+                ("black", "black"),
+                ("transparent", "#00000000"),
+                ("mid", "rgb(128, 128, 128)"),
+                ("mid2", "frgb(0.5, 0.5, 0.5)"),
+                ("rgb", "rgb(1, 2, 3)"),
+                ("rgba", "rgba(1, 2, 3, 255)"),
+                ("argb", "argb(1, 2, 3, 255)"),
+                ("hsl", "hsl(360, 1.0, 0.5)"),
+                ("hsla", "hsla(360, 1.0, 0.5, 1.0)"),
+                ("hsv", "hsv(360, 1.0, 0.5)"),
+                ("hsva", "hsva(360, 1.0, 0.5, 1.0)"),
+            ]
+            .map(|(a, b)| (a.into(), b.into())),
+        ),
+        ..Colors::default()
     };
 
     let src = r#"

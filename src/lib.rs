@@ -13,9 +13,11 @@ pub enum Error {
     StdIo(#[from] std::io::Error),
 
     #[error(transparent)]
+    ConfyError(#[from] confy::ConfyError),
+
+    #[error(transparent)]
     FromHexError(#[from] FromHexError),
-
-
+    
     #[error("Failed to parse: {0}")]
     FailedToParseValue(String),
 
