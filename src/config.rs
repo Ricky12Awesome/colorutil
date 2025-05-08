@@ -1,11 +1,9 @@
 use crate::Result;
 use derive_more::Deref;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use clap::builder::TypedValueParser;
 
 // copy and pasted from palette::named::COLORS since it's private for whatever reason
 pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [

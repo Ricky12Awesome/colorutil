@@ -56,6 +56,24 @@ macro_rules! impl_from_color_map {
     };
 }
 
+macro_rules! impl_to_color_map {
+    ($($name:literal: $fname:ident -> $to:tt<$($t:tt),+>(|$($n:ident),+| $($fmt:tt)*)),+ $(,)?) => {
+        $(pub fn $fname(self) -> String {
+            let __into_color: $to = self.into();
+            let ($($n),+) = __into_color.into_format::<$($t),+>().into_components();
+
+            format!($($fmt)*)
+        })+
+
+        pub fn to_format(self, format: &str) -> Result<String> {
+            match format {
+                $($name => Ok(self.$fname())),+,
+                _ => Err(Error::FailedToParseFormat(format.to_owned()))
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone)]
 pub enum Color {
     Srgb(Srgb),
@@ -83,16 +101,38 @@ impl Color {
         from_ahsv([f32; 4]) -> from_hsva(3, 0, 1, 2),
     );
 
-    impl_to_color!(
-        to_srgb -> Srgb,
-        to_srgba -> Srgba,
-        to_rgb -> Rgb,
-        to_rgba -> Rgba,
-        to_hsl -> Hsl,
-        to_hsla -> Hsla,
-        to_hsv -> Hsv,
-        to_hsva -> Hsva
+    // fn e(self) {
+    //     let e = self.to_rgba().into_format::<u8, u8>().into_components();
+    // }
+
+    impl_to_color_map!(
+        "ahex": to_ahex -> Rgba<u8, u8>(|r, g, b, a| "#{a:02X}{r:02X}{g:02X}{b:02X}"),
+        "hexa": to_hexa -> Rgba<u8, u8>(|r, g, b, a| "#{r:02X}{g:02X}{b:02X}{a:02X}"),
+        "hex": to_hex -> Rgb<u8>(|r, g, b| "#{r:02X}{g:02X}{b:02X}"),
+        "argb": to_argb -> Rgba<u8, u8>(|r, g, b, a| "{a}, {r}, {g}, {b}"),
+        "rgba": to_rgba -> Rgba<u8, u8>(|r, g, b, a| "{r}, {g}, {b}, {a}"),
+        "rgb": to_rgb -> Rgb<u8>(|r, g, b| "{r}, {g}, {b}"),
+        "fargb": to_fargb -> Srgba<f32, f32>(|r, g, b, a| "{a}, {r}, {g}, {b}"),
+        "frgba": to_frgba -> Srgba<f32, f32>(|r, g, b, a| "{r}, {g}, {b}, {a}"),
+        "frgb": to_frgb -> Srgb<u8>(|r, g, b| "{r}, {g}, {b}"),
+        "ahsl": to_ahsl -> Hsla<f32, f32>(|h, s, l, a| "{a}, {}, {s}, {l},", h.into_inner()),
+        "hsla": to_hsla -> Hsla<f32, f32>(|h, s, l, a| "{}, {s}, {l}, {a}", h.into_inner()),
+        "hsl": to_hsl -> Hsl<f32>(|h, s, l| "{}, {s}, {l}", h.into_inner()),
+        "ahsv": to_ahsv -> Hsva<f32, f32>(|h, s, v, a| "{a}, {}, {s}, {v}", h.into_inner()),
+        "hsva": to_hsva -> Hsva<f32, f32>(|h, s, v, a| "{}, {s}, {v}, {a}", h.into_inner()),
+        "hsv": to_hsv -> Hsv<f32>(|h, s, v| "{}, {s}, {v}", h.into_inner()),
     );
+
+    // impl_to_color!(
+    //     to_srgb -> Srgb,
+    //     to_srgba -> Srgba,
+    //     to_rgb -> Rgb,
+    //     to_rgba -> Rgba,
+    //     to_hsl -> Hsl,
+    //     to_hsla -> Hsla,
+    //     to_hsv -> Hsv,
+    //     to_hsva -> Hsva
+    // );
 }
 
 impl_color!(Srgba);
@@ -113,10 +153,10 @@ impl FromStr for Color {
             "fargb": from_fargb<f32, 4>,
             "frgba": from_frgba<f32, 4>,
             "frgb": from_frgb<f32, 3>,
-            "ahsv": from_ahsv<f32, 4>,
+            "ahsl": from_ahsl<f32, 4>,
             "hsla": from_hsla<f32, 4>,
             "hsl": from_hsl<f32, 3>,
-            "ahsl": from_ahsl<f32, 4>,
+            "ahsv": from_ahsv<f32, 4>,
             "hsva": from_hsva<f32, 4>,
             "hsv": from_hsv<f32, 3>,
         );
@@ -158,95 +198,5 @@ pub fn parse_params<T: FromStr, const N: usize>(text: &str) -> Result<[T; N]> {
 pub fn parse_format<'a>(src_color: &'a str, format: &'a str) -> Result<String> {
     let color = src_color.parse::<Color>()?;
 
-    match format {
-        "hexa" => {
-            let rgba = color.to_rgba().into_format::<u8, u8>();
-            let (r, g, b, a) = rgba.into_components();
-            let color = format!("#{r:02X}{g:02X}{b:02X}{a:02X}");
-
-            Ok(color)
-        }
-        "hex" => {
-            let rgb = color.to_rgb().into_format::<u8>();
-            let (r, g, b) = rgb.into_components();
-            let color = format!("#{r:02X}{g:02X}{b:02X}");
-
-            Ok(color)
-        }
-        "frgb" => {
-            let rgb = color.to_rgb();
-            let (r, g, b) = rgb.into_components();
-            let color = format!("{r}, {g}, {b}");
-
-            Ok(color)
-        }
-        "frgba" => {
-            let rgba = color.to_rgba();
-            let (r, g, b, a) = rgba.into_components();
-            let color = format!("{r}, {g}, {b}, {a}");
-
-            Ok(color)
-        }
-        "fargb" => {
-            let rgba = color.to_rgba();
-            let (r, g, b, a) = rgba.into_components();
-            let color = format!("{a}, {r}, {g}, {b}");
-
-            Ok(color)
-        }
-        "rgb" => {
-            let rgb = color.to_rgb().into_format::<u8>();
-            let (r, g, b) = rgb.into_components();
-            let color = format!("{r}, {g}, {b}");
-
-            Ok(color)
-        }
-        "rgba" => {
-            let rgba = color.to_rgba().into_format::<u8, u8>();
-            let (r, g, b, a) = rgba.into_components();
-            let color = format!("{r}, {g}, {b}, {a}");
-
-            Ok(color)
-        }
-        "argb" => {
-            let rgba = color.to_rgba().into_format::<u8, u8>();
-            let (r, g, b, a) = rgba.into_components();
-            let color = format!("{a}, {r}, {g}, {b}");
-
-            Ok(color)
-        }
-        "hsl" => {
-            let hsl = color.to_hsl();
-            let (h, s, l) = hsl.into_components();
-            let h = h.into_inner();
-            let color = format!("{h}, {s}, {l}");
-
-            Ok(color)
-        }
-        "hsla" => {
-            let hsla = color.to_hsla();
-            let (h, s, l, a) = hsla.into_components();
-            let h = h.into_inner();
-            let color = format!("{h}, {s}, {l}, {a}");
-
-            Ok(color)
-        }
-        "hsv" => {
-            let hsv = color.to_hsv();
-            let (h, s, v) = hsv.into_components();
-            let h = h.into_inner();
-            let color = format!("{h}, {s}, {v}");
-
-            Ok(color)
-        }
-        "hsva" => {
-            let hsva = color.to_hsva();
-            let (h, s, v, a) = hsva.into_components();
-            let h = h.into_inner();
-            let color = format!("{h}, {s}, {v}, {a}");
-
-            Ok(color)
-        }
-        _ => Err(Error::FailedToParseFormat(format.to_owned())),
-    }
+    color.to_format(format)
 }
