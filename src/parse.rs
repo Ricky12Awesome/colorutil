@@ -1,12 +1,12 @@
 use crate::color::parse_format;
-use crate::config::Colors;
+use crate::config::Palette;
 use crate::{Error, Result};
 
 pub fn replace_colors(
     src: impl AsRef<str>,
     prefix: impl AsRef<str>,
     suffix: impl AsRef<str>,
-    colors: &Colors,
+    colors: &Palette,
 ) -> Result<String> {
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
@@ -49,7 +49,7 @@ fn test_replace_colors() {
 
     let prefix = "${";
     let suffix = "}";
-    let colors = Colors {
+    let colors = Palette {
         colors: HashMap::from_iter(
             [
                 ("white", "white"),
@@ -67,7 +67,7 @@ fn test_replace_colors() {
             ]
             .map(|(a, b)| (a.into(), b.into())),
         ),
-        ..Colors::default()
+        ..Palette::default()
     };
 
     let src = r#"

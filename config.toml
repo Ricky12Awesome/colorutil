@@ -1,6 +1,0 @@
-prefix = "${"
-suffix = "}"
-default_palette = "custom"
-
-[colors.custom]
-white = "#ffffff"

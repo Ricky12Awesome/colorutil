@@ -1,11 +1,15 @@
 use crate::Result;
 use derive_more::Deref;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+
 // copy and pasted from palette::named::COLORS since it's private for whatever reason
+#[rustfmt::skip]
 pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [
     (Cow::Borrowed("aliceblue"), Cow::Borrowed("aliceblue")),
     (Cow::Borrowed("antiquewhite"), Cow::Borrowed("antiquewhite")),
@@ -158,25 +162,81 @@ pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [
 ];
 
 #[derive(Debug, Serialize, Deserialize, Deref)]
-pub struct Colors {
+pub struct Palette {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[deref(ignore)]
     pub inherit: Vec<Cow<'static, str>>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[deref(ignore)]
-    pub source: Vec<PathBuf>,
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub colors: HashMap<Cow<'static, str>, Cow<'static, str>>,
 }
 
-impl Default for Colors {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PaletteMaybeFile {
+    PaletteFile(PathBuf),
+    Palette(Palette),
+}
+
+impl PaletteMaybeFile {
+    pub fn deserialize_with<'de, D>(deserializer: D) -> Result<Palette, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let deserialized = Self::deserialize(deserializer)?;
+
+        match deserialized {
+            Self::PaletteFile(path) => {
+                let ext = path.extension().and_then(OsStr::to_str);
+
+                let path = match ext {
+                    Some("toml") => path.with_extension(""),
+                    #[cfg(debug_assertions)]
+                    _ => path.with_extension("toml"),
+                    #[cfg(not(debug_assertions))]
+                    _ => path,
+                };
+
+                #[cfg(not(debug_assertions))]
+                let Some(path) = path.to_str() else {
+                    return Err(serde::de::Error::custom(format!(
+                        "path is not valid UTF-8: {path:?}"
+                    )));
+                };
+
+                #[cfg(not(debug_assertions))]
+                let path = confy::get_configuration_file_path(APP_NAME, path)
+                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+
+                if !path.is_file() {
+                    return Err(serde::de::Error::custom(format!(
+                        "path does not exist or not a file: {path:?}"
+                    )));
+                }
+
+                let data = std::fs::read_to_string(&path) //
+                    .map_err(serde::de::Error::custom)?;
+
+                let value = toml::from_str::<Palette>(&data) //
+                    .map_err(serde::de::Error::custom)?;
+
+                Ok(value)
+            }
+            Self::Palette(colors) => Ok(colors),
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Deref)]
+pub struct ParsedColorConfig(
+    #[serde(deserialize_with = "PaletteMaybeFile::deserialize_with")] pub Palette,
+);
+
+impl Default for Palette {
     fn default() -> Self {
         Self {
-            inherit: vec!["default".into()],
-            source: Vec::new(),
-            colors: HashMap::new(),
+            inherit: vec![],
+            colors: HashMap::from_iter(DEFAULT_COLORS),
         }
     }
 }
@@ -185,31 +245,16 @@ impl Default for Colors {
 pub struct Config {
     pub prefix: Cow<'static, str>,
     pub suffix: Cow<'static, str>,
-    pub default_palette: Cow<'static, str>,
-    pub colors: HashMap<Cow<'static, str>, Colors>,
+    pub palette: Cow<'static, str>,
+    pub palettes: HashMap<Cow<'static, str>, ParsedColorConfig>,
 }
 impl Default for Config {
     fn default() -> Self {
         Self {
             prefix: "${".into(),
             suffix: "}".into(),
-            default_palette: "default".into(),
-            colors: HashMap::from_iter([(
-                "default".into(),
-                Colors {
-                    inherit: Vec::new(),
-                    source: Vec::new(),
-                    colors: HashMap::from_iter(DEFAULT_COLORS),
-                },
-            )]),
+            palette: "default".into(),
+            palettes: HashMap::from_iter([("default".into(), ParsedColorConfig::default())]),
         }
-    }
-}
-
-impl Config {
-    pub fn from_cli(path: Option<PathBuf>, palette: Option<Cow<'static, str>>) -> Result<Self> {
-        // confy::get_configuration_file_path(env!("CARGO_PKG_NAME"), "config");
-
-        todo!()
     }
 }

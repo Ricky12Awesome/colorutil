@@ -1,0 +1,7 @@
+prefix = "${"
+suffix = "}"
+
+palette = "default"
+
+[palettes]
+default = "default"
