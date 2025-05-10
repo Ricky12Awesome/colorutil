@@ -1,7 +1,25 @@
 prefix = "${"
 suffix = "}"
 
-palette = "default"
+palette = "a"
 
-[palettes]
-default = "default"
+[palettes.a]
+inherits = ["b"]
+
+[palettes.a.colors]
+r="rgb(255, 255, 255)"
+g="rgb(255, 255, 255)"
+b="rgb(255, 255, 255)"
+
+[palettes.b]
+inherits = ["c"]
+
+[palettes.b.colors]
+r="rgb(0, 0, 0)"
+g="rgb(0, 0, 0)"
+b="rgb(0, 0, 0)"
+
+[palettes.c.colors]
+r="rgb(255, 0, 0)"
+g="rgb(0, 255, 0)"
+b="rgb(0, 0, 255)"

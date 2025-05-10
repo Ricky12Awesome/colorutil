@@ -45,30 +45,25 @@ pub fn replace_colors(
 
 #[test]
 fn test_replace_colors() {
-    use std::collections::HashMap;
-
     let prefix = "${";
     let suffix = "}";
-    let colors = Palette {
-        colors: HashMap::from_iter(
-            [
-                ("white", "white"),
-                ("black", "black"),
-                ("transparent", "#00000000"),
-                ("mid", "rgb(128, 128, 128)"),
-                ("mid2", "frgb(0.5, 0.5, 0.5)"),
-                ("rgb", "rgb(1, 2, 3)"),
-                ("rgba", "rgba(1, 2, 3, 255)"),
-                ("argb", "argb(1, 2, 3, 255)"),
-                ("hsl", "hsl(360, 1.0, 0.5)"),
-                ("hsla", "hsla(360, 1.0, 0.5, 1.0)"),
-                ("hsv", "hsv(360, 1.0, 0.5)"),
-                ("hsva", "hsva(360, 1.0, 0.5, 1.0)"),
-            ]
-            .map(|(a, b)| (a.into(), b.into())),
-        ),
-        ..Palette::default()
-    };
+    let colors = Palette::from_iter(
+        [
+            ("white", "white"),
+            ("black", "black"),
+            ("transparent", "#00000000"),
+            ("mid", "rgb(128, 128, 128)"),
+            ("mid2", "frgb(0.5, 0.5, 0.5)"),
+            ("rgb", "rgb(1, 2, 3)"),
+            ("rgba", "rgba(1, 2, 3, 255)"),
+            ("argb", "argb(1, 2, 3, 255)"),
+            ("hsl", "hsl(360, 1.0, 0.5)"),
+            ("hsla", "hsla(360, 1.0, 0.5, 1.0)"),
+            ("hsv", "hsv(360, 1.0, 0.5)"),
+            ("hsva", "hsva(360, 1.0, 0.5, 1.0)"),
+        ]
+        .map(|(a, b)| (a.into(), b.into())),
+    );
 
     let src = r#"
 white: ${white:hex}

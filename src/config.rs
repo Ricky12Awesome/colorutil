@@ -1,8 +1,7 @@
 use crate::{Error, Result};
-use derive_more::Deref;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -161,67 +160,118 @@ pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [
     (Cow::Borrowed("yellowgreen"), Cow::Borrowed("yellowgreen")),
 ];
 
-#[derive(Debug, Serialize, Deserialize, Deref)]
-pub struct Palette {
+pub type Palette<'a> = HashMap<Cow<'a, str>, Cow<'a, str>>;
+pub type Palettes<'a> = HashMap<Cow<'a, str>, Palette<'a>>;
+pub type PalettesBase<'a> = HashMap<Cow<'a, str>, PaletteBase<'a>>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaletteBase<'a> {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[deref(ignore)]
-    pub inherit: Vec<PathBuf>,
+    inherits: Vec<Cow<'a, str>>,
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub colors: HashMap<Cow<'static, str>, Cow<'static, str>>,
+    colors: Palette<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum PaletteMaybeFile {
-    PaletteFile(PathBuf),
-    Palette(Palette),
-}
-
-impl PaletteMaybeFile {
-    pub fn deserialize_with<'de, D>(deserializer: D) -> Result<Palette, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let deserialized = Self::deserialize(deserializer)?;
-
-        match deserialized {
-            Self::PaletteFile(path) => load_config(path).map_err(serde::de::Error::custom),
-            Self::Palette(colors) => Ok(colors),
-        }
-    }
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Deref)]
-pub struct ParsedColorConfig(
-    #[serde(deserialize_with = "PaletteMaybeFile::deserialize_with")] pub Palette,
-);
-
-impl Default for Palette {
-    fn default() -> Self {
-        Self {
-            inherit: vec![],
-            colors: HashMap::from_iter(DEFAULT_COLORS),
-        }
-    }
+pub enum PaletteOrFile<'a> {
+    File(PathBuf),
+    Palette(PaletteBase<'a>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ConfigBase<'a> {
+    pub prefix: Cow<'a, str>,
+    pub suffix: Cow<'a, str>,
+    pub palette: Cow<'a, str>,
+    pub palettes: HashMap<Cow<'a, str>, PaletteOrFile<'a>>,
+}
+
+#[derive(Debug)]
 pub struct Config<'a> {
     pub prefix: Cow<'a, str>,
     pub suffix: Cow<'a, str>,
     pub palette: Cow<'a, str>,
-    pub palettes: HashMap<Cow<'a, str>, ParsedColorConfig>,
+    pub palettes: Palettes<'a>,
 }
 
-impl Default for Config<'_> {
-    fn default() -> Self {
-        Self {
-            prefix: "${".into(),
-            suffix: "}".into(),
-            palette: "default".into(),
-            palettes: HashMap::from_iter([("default".into(), ParsedColorConfig::default())]),
+impl<'a> PaletteOrFile<'a> {
+    pub fn parse(self) -> Result<PaletteBase<'a>> {
+        match self {
+            PaletteOrFile::File(path) => load_config::<PaletteBase>(path),
+            PaletteOrFile::Palette(colors) => Ok(colors),
         }
+    }
+}
+
+impl<'a> PaletteBase<'a> {
+    pub fn all_inherits(
+        &self,
+        name: Cow<'a, str>,
+        palettes: &PalettesBase<'a>,
+    ) -> Result<Vec<Cow<'a, str>>> {
+        let mut inherits = self.inherits.clone();
+
+        for inherit in &self.inherits {
+            let palette = palettes
+                .get(inherit)
+                .ok_or_else(|| Error::NoInherit(inherit.to_string(), name.to_string()))?;
+
+            let sub_inherits = palette.all_inherits(inherit.clone(), palettes)?;
+
+            inherits.extend(sub_inherits);
+        }
+        
+        inherits.dedup();
+
+        Ok(inherits)
+    }
+
+    pub fn parse(mut self, name: Cow<'a, str>, palettes: &PalettesBase<'a>) -> Result<Palette<'a>> {
+        let inherits = self.all_inherits(name, palettes)?;
+        
+        for inherit in inherits {
+            let palette = palettes
+                .get(&inherit)
+                .ok_or_else(|| Error::NoPalette(inherit.to_string()))?;
+
+            for (k, v) in palette.colors.clone() {
+                self.colors.entry(k).or_insert(v);
+            }
+        }
+
+        Ok(self.colors)
+    }
+}
+
+impl<'a> ConfigBase<'a> {
+    pub fn parse(self) -> Result<Config<'a>> {
+        let Self {
+            prefix,
+            suffix,
+            palette,
+            palettes,
+        } = self;
+
+        let inherits = palettes
+            .clone()
+            .into_iter()
+            .map(|(k, v)| Ok((k, v.parse()?)))
+            .collect::<Result<PalettesBase>>()?;
+
+        let palettes = inherits
+            .clone()
+            .into_iter()
+            .map(|(k, v)| Ok((k.clone(), v.parse(k, &inherits)?)))
+            .collect::<Result<Palettes<'a>>>()?;
+
+        Ok(Config {
+            prefix,
+            suffix,
+            palette,
+            palettes,
+        })
     }
 }
 

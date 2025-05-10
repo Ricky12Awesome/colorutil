@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use std::borrow::Cow;
 use std::path::PathBuf;
-use colorutil::config::{Config, APP_NAME};
+use colorutil::config::{ConfigBase, APP_NAME};
 use colorutil::parse::replace_colors;
 
 #[derive(Debug, Parser)]

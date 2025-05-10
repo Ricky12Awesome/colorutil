@@ -18,6 +18,15 @@ pub enum Error {
     
     #[error("cannot find config path")]
     NoConfigPath,
+
+    #[error("cannot find palette {0} in {1}")]
+    NoInherit(String, String),
+
+    #[error("cannot find palette {0}")]
+    NoPalette(String),
+
+    #[error("invalid config")]
+    InvalidConfig,
     
     #[error("not a file: {0}")]
     ConfigNotFile(PathBuf),
