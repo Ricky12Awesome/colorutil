@@ -1,9 +1,10 @@
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -180,11 +181,19 @@ pub enum PaletteOrFile<'a> {
     Palette(PaletteBase<'a>),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AutoLoad {
+    All(bool),
+    Specific(Vec<PathBuf>),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigBase<'a> {
     pub prefix: Cow<'a, str>,
     pub suffix: Cow<'a, str>,
     pub palette: Cow<'a, str>,
+    pub autoload: AutoLoad,
     pub palettes: HashMap<Cow<'a, str>, PaletteOrFile<'a>>,
 }
 
@@ -199,8 +208,49 @@ pub struct Config<'a> {
 impl<'a> PaletteOrFile<'a> {
     pub fn parse(self) -> Result<PaletteBase<'a>> {
         match self {
-            PaletteOrFile::File(path) => load_config::<PaletteBase>(path),
-            PaletteOrFile::Palette(colors) => Ok(colors),
+            Self::File(path) => load_config::<PaletteBase>(path),
+            Self::Palette(colors) => Ok(colors),
+        }
+    }
+}
+
+impl AutoLoad {
+    pub fn parse<'a>(self) -> Result<PalettesBase<'a>> {
+        match self {
+            Self::All(false) => Ok(HashMap::new()),
+            Self::All(true) => {
+                let cur = get_config_dir()?;
+                let paths = WalkDir::new(cur)
+                    .max_depth(1)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .map(|e| e.into_path())
+                    .filter(|p| p.is_file())
+                    .filter(|p| p.extension() == Some(OsStr::new("toml")))
+                    .filter(|p| p.file_name() != Some(OsStr::new("config.toml")))
+                    .collect::<Vec<PathBuf>>();
+
+                Self::Specific(paths).parse()
+            }
+            Self::Specific(paths) => paths
+                .into_iter()
+                .filter(|p| p.is_file())
+                .filter(|p| p.extension() == Some(OsStr::new("toml")))
+                .filter(|p| p.file_name() != Some(OsStr::new("config.toml")))
+                .filter(|p| p.file_name().is_some())
+                .map(|p| {
+                    (
+                        p.with_extension("")
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string()
+                            .into(),
+                        p,
+                    )
+                })
+                .map(|(name, p)| Ok((name, load_config::<PaletteBase>(p)?)))
+                .collect::<Result<PalettesBase<'a>>>(),
         }
     }
 }
@@ -222,7 +272,7 @@ impl<'a> PaletteBase<'a> {
 
             inherits.extend(sub_inherits);
         }
-        
+
         inherits.dedup();
 
         Ok(inherits)
@@ -230,7 +280,7 @@ impl<'a> PaletteBase<'a> {
 
     pub fn parse(mut self, name: Cow<'a, str>, palettes: &PalettesBase<'a>) -> Result<Palette<'a>> {
         let inherits = self.all_inherits(name, palettes)?;
-        
+
         for inherit in inherits {
             let palette = palettes
                 .get(&inherit)
@@ -251,19 +301,26 @@ impl<'a> ConfigBase<'a> {
             prefix,
             suffix,
             palette,
+            autoload,
             palettes,
         } = self;
 
-        let inherits = palettes
+        let autoload = autoload.parse()?;
+
+        let mut palettes_base = palettes
             .clone()
             .into_iter()
             .map(|(k, v)| Ok((k, v.parse()?)))
             .collect::<Result<PalettesBase>>()?;
 
-        let palettes = inherits
+        for (k, v) in autoload {
+            palettes_base.entry(k).or_insert(v);
+        }
+
+        let palettes = palettes_base
             .clone()
             .into_iter()
-            .map(|(k, v)| Ok((k.clone(), v.parse(k, &inherits)?)))
+            .map(|(k, v)| Ok((k.clone(), v.parse(k, &palettes_base)?)))
             .collect::<Result<Palettes<'a>>>()?;
 
         Ok(Config {
