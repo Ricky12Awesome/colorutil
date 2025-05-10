@@ -1,10 +1,10 @@
-use crate::Result;
+use crate::{Error, Result};
 use derive_more::Deref;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -165,7 +165,7 @@ pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [
 pub struct Palette {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[deref(ignore)]
-    pub inherit: Vec<Cow<'static, str>>,
+    pub inherit: Vec<PathBuf>,
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub colors: HashMap<Cow<'static, str>, Cow<'static, str>>,
@@ -186,42 +186,7 @@ impl PaletteMaybeFile {
         let deserialized = Self::deserialize(deserializer)?;
 
         match deserialized {
-            Self::PaletteFile(path) => {
-                let ext = path.extension().and_then(OsStr::to_str);
-
-                let path = match ext {
-                    Some("toml") => path.with_extension(""),
-                    #[cfg(debug_assertions)]
-                    _ => path.with_extension("toml"),
-                    #[cfg(not(debug_assertions))]
-                    _ => path,
-                };
-
-                #[cfg(not(debug_assertions))]
-                let Some(path) = path.to_str() else {
-                    return Err(serde::de::Error::custom(format!(
-                        "path is not valid UTF-8: {path:?}"
-                    )));
-                };
-
-                #[cfg(not(debug_assertions))]
-                let path = confy::get_configuration_file_path(APP_NAME, path)
-                    .map_err(|err| serde::de::Error::custom(err.to_string()))?;
-
-                if !path.is_file() {
-                    return Err(serde::de::Error::custom(format!(
-                        "path does not exist or not a file: {path:?}"
-                    )));
-                }
-
-                let data = std::fs::read_to_string(&path) //
-                    .map_err(serde::de::Error::custom)?;
-
-                let value = toml::from_str::<Palette>(&data) //
-                    .map_err(serde::de::Error::custom)?;
-
-                Ok(value)
-            }
+            Self::PaletteFile(path) => load_config(path).map_err(serde::de::Error::custom),
             Self::Palette(colors) => Ok(colors),
         }
     }
@@ -242,13 +207,14 @@ impl Default for Palette {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub prefix: Cow<'static, str>,
-    pub suffix: Cow<'static, str>,
-    pub palette: Cow<'static, str>,
-    pub palettes: HashMap<Cow<'static, str>, ParsedColorConfig>,
+pub struct Config<'a> {
+    pub prefix: Cow<'a, str>,
+    pub suffix: Cow<'a, str>,
+    pub palette: Cow<'a, str>,
+    pub palettes: HashMap<Cow<'a, str>, ParsedColorConfig>,
 }
-impl Default for Config {
+
+impl Default for Config<'_> {
     fn default() -> Self {
         Self {
             prefix: "${".into(),
@@ -257,4 +223,37 @@ impl Default for Config {
             palettes: HashMap::from_iter([("default".into(), ParsedColorConfig::default())]),
         }
     }
+}
+
+pub fn load_config<'de, T: Deserialize<'de>>(name: impl AsRef<Path>) -> Result<T> {
+    let dir = get_config_dir()?;
+    let path = dir.join(name);
+
+    let ext = path.extension().and_then(OsStr::to_str);
+    let path = match ext {
+        Some("toml") => path,
+        _ => path.with_extension("toml"),
+    };
+
+    if !path.is_file() {
+        return Err(Error::ConfigNotFile(path));
+    }
+
+    let data = std::fs::read_to_string(&path)?;
+
+    let deserializer = toml::Deserializer::new(&data);
+    let value = T::deserialize(deserializer)?;
+
+    Ok(value)
+}
+
+pub fn get_config_dir() -> Result<PathBuf> {
+    #[cfg(not(debug_assertions))]
+    let dirs = directories::ProjectDirs::from("rs", "", APP_NAME) //
+        .ok_or_else(|| Error::NoConfigPath)?;
+
+    #[cfg(debug_assertions)]
+    let dirs = std::env::current_dir()?;
+
+    Ok(dirs)
 }

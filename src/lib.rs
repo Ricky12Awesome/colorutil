@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use palette::rgb::FromHexError;
 use thiserror::Error;
 
@@ -13,7 +14,13 @@ pub enum Error {
     StdIo(#[from] std::io::Error),
 
     #[error(transparent)]
-    ConfyError(#[from] confy::ConfyError),
+    Toml(#[from] toml::de::Error),
+    
+    #[error("cannot find config path")]
+    NoConfigPath,
+    
+    #[error("not a file: {0}")]
+    ConfigNotFile(PathBuf),
 
     #[error(transparent)]
     FromHexError(#[from] FromHexError),

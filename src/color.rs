@@ -19,14 +19,6 @@ macro_rules! impl_color {
     };
 }
 
-macro_rules! impl_to_color {
-    ($($name:ident -> $format:ty),+) => {
-        $(pub fn $name(self) -> $format {
-            self.into()
-        })+
-    };
-}
-
 macro_rules! impl_from_color {
     ($($name:ident($t:ty) -> $color:ident:$format:tt $(a=$alpha:literal)?),+ $(,)?) => {
         $(pub fn $name(value: $t) -> Self {

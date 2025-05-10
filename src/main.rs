@@ -56,17 +56,17 @@ pub enum CliCommand {
 
 fn main() -> colorutil::Result<()> {
     let args = Cli::parse();
-    #[cfg(debug_assertions)]
-    let config = {
-        let config = Config::default();
-        let config = toml::to_string_pretty(&config).unwrap();
-        let config = toml::from_str::<Config>(&config).unwrap();
-        config
-    };
-    
-    #[cfg(not(debug_assertions))]
-    let config = confy::load::<Config>(env!("CARGO_PKG_NAME"), "config")?;
-    let default_palette = config.palettes.get(&config.palette).unwrap();
+    // #[cfg(debug_assertions)]
+    // let config = {
+    //     let config = Config::default();
+    //     let config = toml::to_string_pretty(&config).unwrap();
+    //     let config = toml::from_str::<Config>(&config).unwrap();
+    //     config
+    // };
+    // 
+    // #[cfg(not(debug_assertions))]
+    // let config = confy::load::<Config>(env!("CARGO_PKG_NAME"), "config")?;
+    // let default_palette = config.palettes.get(&config.palette).unwrap();
 
     match &args.command {
         CliCommand::Completions { shell } => {
@@ -83,9 +83,9 @@ fn main() -> colorutil::Result<()> {
         CliCommand::Parse {
             text: Some(text), ..
         } => {
-            let value = replace_colors(text, "{", "}", default_palette)?;
+            // let value = replace_colors(text, "{", "}", default_palette)?;
 
-            println!("{}", value);
+            // println!("{}", value);
         }
         _ => {}
     }
