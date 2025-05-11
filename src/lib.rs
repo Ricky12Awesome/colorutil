@@ -29,7 +29,7 @@ pub enum Error {
     InvalidConfig,
     
     #[error("not a file: {0}")]
-    ConfigNotFile(PathBuf),
+    NotFile(PathBuf),
 
     #[error(transparent)]
     FromHexError(#[from] FromHexError),

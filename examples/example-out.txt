@@ -1,0 +1,2 @@
+this is white: #FFFFFF
+this is white in rgb: 255, 255, 255

@@ -1,10 +1,12 @@
-use clap::{value_parser, CommandFactory, ValueHint};
+use clap::{CommandFactory, ValueHint, value_parser};
 use clap::{Parser, Subcommand};
-use clap_complete::{generate, Shell};
-use std::borrow::Cow;
-use std::path::PathBuf;
-use colorutil::config::{ConfigBase, APP_NAME};
+use clap_complete::{Shell, generate};
+use colorutil::Error;
+use colorutil::config::{ConfigBase, load_config, override_config_dir};
 use colorutil::parse::replace_colors;
+use std::borrow::Cow;
+use std::io::{Read, Write};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -47,45 +49,107 @@ pub enum CliCommand {
         #[clap(
             long,
             conflicts_with_all = ["src", "dst"],
-            required_unless_present_all = ["src", "dst"],
+            required_unless_present_any = ["src", "dst"],
             value_hint = ValueHint::Other
         )]
         text: Option<Cow<'static, str>>,
+
+        #[clap(
+            long,
+            value_hint = ValueHint::Other
+        )]
+        prefix: Option<Cow<'static, str>>,
+
+        #[clap(
+            long,
+            value_hint = ValueHint::Other
+        )]
+        suffix: Option<Cow<'static, str>>,
+
+        #[clap(
+            long,
+            action,
+            default_value_t = false,
+            help = "Overrides destination file if it exists"
+        )]
+        force: bool,
     },
 }
 
 fn main() -> colorutil::Result<()> {
     let args = Cli::parse();
-    // #[cfg(debug_assertions)]
-    // let config = {
-    //     let config = Config::default();
-    //     let config = toml::to_string_pretty(&config).unwrap();
-    //     let config = toml::from_str::<Config>(&config).unwrap();
-    //     config
-    // };
-    // 
-    // #[cfg(not(debug_assertions))]
-    // let config = confy::load::<Config>(env!("CARGO_PKG_NAME"), "config")?;
-    // let default_palette = config.palettes.get(&config.palette).unwrap();
 
-    match &args.command {
+    if let Some(path) = &args.config {
+        override_config_dir(path);
+    }
+
+    let config = load_config::<ConfigBase>("config")?;
+    let config = config.parse()?;
+    let palette = &config.palettes[&config.palette];
+
+    match args.command {
         CliCommand::Completions { shell } => {
             let mut command = Cli::command();
             let name = command.get_name().to_string();
 
-            generate(*shell, &mut command, name, &mut std::io::stdout());
+            generate(shell, &mut command, name, &mut std::io::stdout());
         }
         CliCommand::Parse {
             src: Some(src),
             dst,
+            force,
             ..
-        } => {}
-        CliCommand::Parse {
-            text: Some(text), ..
         } => {
-            // let value = replace_colors(text, "{", "}", default_palette)?;
+            let text = std::fs::read_to_string(&src)?;
+            let text = replace_colors(text, config.prefix, config.suffix, palette)?;
 
-            // println!("{}", value);
+            match dst {
+                None => {
+                    println!("{}", text);
+                }
+                Some(path) if force && !path.is_file() => {
+                    return Err(Error::NotFile(path));
+                }
+                Some(path) if force && path.is_file() || !path.exists() => {
+                    std::fs::write(&path, text)?;
+                }
+                Some(path) if !force && path.is_file() => {
+                    print!(
+                        "Do you want to overwrite '{}'? [y/n]: ",
+                        path.to_string_lossy()
+                    );
+
+                    std::io::stdout().flush()?;
+
+                    let Some(Ok(line)) = std::io::stdin().lines().next() else {
+                        return Ok(());
+                    };
+
+                    let line = line.to_lowercase();
+                    let line = line.trim();
+
+                    match line {
+                        "y" | "yes" => {
+                            std::fs::write(&path, text)?;
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+        CliCommand::Parse {
+            text: Some(text),
+            prefix,
+            suffix,
+            ..
+        } => {
+            let prefix = prefix.unwrap_or(config.prefix);
+            let suffix = suffix.unwrap_or(config.suffix);
+
+            let text = replace_colors(text, prefix, suffix, palette)?;
+
+            println!("{}", text);
         }
         _ => {}
     }

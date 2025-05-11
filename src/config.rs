@@ -8,6 +8,8 @@ use walkdir::WalkDir;
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
+static mut CONFIG_DIR: Option<PathBuf> = None;
+
 // copy and pasted from palette::named::COLORS since it's private for whatever reason
 #[rustfmt::skip]
 pub const DEFAULT_COLORS: [(Cow<'static, str>, Cow<'static, str>); 148] = [
@@ -343,7 +345,7 @@ pub fn load_config<'de, T: Deserialize<'de>>(name: impl AsRef<Path>) -> Result<T
     };
 
     if !path.is_file() {
-        return Err(Error::ConfigNotFile(path));
+        return Err(Error::NotFile(path));
     }
 
     let data = std::fs::read_to_string(&path)?;
@@ -354,7 +356,27 @@ pub fn load_config<'de, T: Deserialize<'de>>(name: impl AsRef<Path>) -> Result<T
     Ok(value)
 }
 
+pub fn override_config_dir(path: impl AsRef<Path>) {
+    unsafe {
+        #[allow(static_mut_refs)]
+        if CONFIG_DIR.is_some() {
+            unreachable!(
+                "Config directory is already set, should only bet set once at start of application"
+            )
+        }
+
+        CONFIG_DIR = Some(path.as_ref().to_path_buf());
+    }
+}
+
 pub fn get_config_dir() -> Result<PathBuf> {
+    #[allow(static_mut_refs)]
+    unsafe {
+        if let Some(path) = &CONFIG_DIR {
+            return Ok(path.clone());
+        }
+    }
+
     #[cfg(not(debug_assertions))]
     let dirs = directories::ProjectDirs::from("rs", "", APP_NAME) //
         .ok_or_else(|| Error::NoConfigPath)?;
