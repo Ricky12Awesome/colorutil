@@ -14,5 +14,6 @@ fn main() {
     // println!("{:?}", config);
     println!();
     println!("{:?}", config.palettes[&config.palette]["r2"]);
-    println!("{:?}", parse_format(c, "hex", p));
+    println!("{:?}", parse_format(c, "hex", Some(p)));
+    println!("{:?}", parse_format(c, "hex", None));
 }
