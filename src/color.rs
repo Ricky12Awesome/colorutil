@@ -3,6 +3,7 @@ use itertools::Itertools;
 use palette::rgb::{Rgb, Rgba};
 use palette::{Hsl, Hsla, Hsv, Hsva, IntoColor, Srgb, Srgba, WithAlpha};
 use std::str::FromStr;
+use crate::config::Palette;
 
 macro_rules! impl_color {
     ($format:ty) => {
@@ -93,10 +94,6 @@ impl Color {
         from_ahsv([f32; 4]) -> from_hsva(3, 0, 1, 2),
     );
 
-    // fn e(self) {
-    //     let e = self.to_rgba().into_format::<u8, u8>().into_components();
-    // }
-
     impl_to_color_map!(
         "ahex": to_ahex -> Rgba<u8, u8>(|r, g, b, a| "#{a:02X}{r:02X}{g:02X}{b:02X}"),
         "hexa": to_hexa -> Rgba<u8, u8>(|r, g, b, a| "#{r:02X}{g:02X}{b:02X}{a:02X}"),
@@ -114,17 +111,6 @@ impl Color {
         "hsva": to_hsva -> Hsva<f32, f32>(|h, s, v, a| "{}, {s}, {v}, {a}", h.into_inner()),
         "hsv": to_hsv -> Hsv<f32>(|h, s, v| "{}, {s}, {v}", h.into_inner()),
     );
-
-    // impl_to_color!(
-    //     to_srgb -> Srgb,
-    //     to_srgba -> Srgba,
-    //     to_rgb -> Rgb,
-    //     to_rgba -> Rgba,
-    //     to_hsl -> Hsl,
-    //     to_hsla -> Hsla,
-    //     to_hsv -> Hsv,
-    //     to_hsva -> Hsva
-    // );
 }
 
 impl_color!(Srgba);
@@ -191,4 +177,45 @@ pub fn parse_format<'a>(src_color: &'a str, format: &'a str) -> Result<String> {
     let color = src_color.parse::<Color>()?;
 
     color.to_format(format)
+}
+
+pub fn parse_text(
+    src: impl AsRef<str>,
+    prefix: impl AsRef<str>,
+    suffix: impl AsRef<str>,
+    palette: &Palette,
+) -> Result<String> {
+    let prefix = prefix.as_ref();
+    let suffix = suffix.as_ref();
+
+    let src = src.as_ref();
+    let mut dst = String::with_capacity(src.len() * 2);
+
+    let mut offset = 0;
+
+    while let Some(start) = src[offset..].find(prefix) {
+        let start = offset + start;
+        let end = src[start..]
+            .find(suffix)
+            .ok_or_else(|| Error::FailedToFindSuffix(start))?;
+
+        let value = &src[start + prefix.len()..start + end];
+        let (name, format) = value
+            .split_once(":")
+            .ok_or_else(|| Error::FailedToParseValue(value.to_string()))?;
+
+        let color = palette
+            .get(name)
+            .ok_or_else(|| Error::FailedToGetColor(value.to_owned()))?;
+
+        let color = parse_format(color, format)?;
+
+        dst.push_str(&src[offset..start]);
+        dst.push_str(&color);
+        offset = start + end + suffix.len();
+    }
+
+    dst.push_str(&src[offset..]);
+
+    Ok(dst)
 }

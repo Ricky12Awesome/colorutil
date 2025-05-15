@@ -1,12 +1,12 @@
-use clap::{CommandFactory, ValueHint, value_parser};
+use clap::{value_parser, CommandFactory, ValueHint};
 use clap::{Parser, Subcommand};
-use clap_complete::{Shell, generate};
+use clap_complete::{generate, Shell};
+use colorutil::config::{load_config, override_config_dir, ConfigBase};
 use colorutil::Error;
-use colorutil::config::{ConfigBase, load_config, override_config_dir};
-use colorutil::parse::replace_colors;
 use std::borrow::Cow;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
+use colorutil::color::parse_text;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -101,7 +101,7 @@ fn main() -> colorutil::Result<()> {
             ..
         } => {
             let text = std::fs::read_to_string(&src)?;
-            let text = replace_colors(text, config.prefix, config.suffix, palette)?;
+            let text = parse_text(text, config.prefix, config.suffix, palette)?;
 
             match dst {
                 None => {
@@ -147,7 +147,7 @@ fn main() -> colorutil::Result<()> {
             let prefix = prefix.unwrap_or(config.prefix);
             let suffix = suffix.unwrap_or(config.suffix);
 
-            let text = replace_colors(text, prefix, suffix, palette)?;
+            let text = parse_text(text, prefix, suffix, palette)?;
 
             println!("{}", text);
         }

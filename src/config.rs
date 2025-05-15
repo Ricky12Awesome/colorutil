@@ -170,10 +170,10 @@ pub type PalettesBase<'a> = HashMap<Cow<'a, str>, PaletteBase<'a>>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaletteBase<'a> {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    inherits: Vec<Cow<'a, str>>,
+    pub inherits: Vec<Cow<'a, str>>,
 
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    colors: Palette<'a>,
+    pub colors: Palette<'a>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,15 +207,6 @@ pub struct Config<'a> {
     pub palettes: Palettes<'a>,
 }
 
-impl<'a> PaletteOrFile<'a> {
-    pub fn parse(self) -> Result<PaletteBase<'a>> {
-        match self {
-            Self::File(path) => load_config::<PaletteBase>(path),
-            Self::Palette(colors) => Ok(colors),
-        }
-    }
-}
-
 impl AutoLoad {
     pub fn parse<'a>(self) -> Result<PalettesBase<'a>> {
         match self {
@@ -227,9 +218,6 @@ impl AutoLoad {
                     .into_iter()
                     .filter_map(Result::ok)
                     .map(|e| e.into_path())
-                    .filter(|p| p.is_file())
-                    .filter(|p| p.extension() == Some(OsStr::new("toml")))
-                    .filter(|p| p.file_name() != Some(OsStr::new("config.toml")))
                     .collect::<Vec<PathBuf>>();
 
                 Self::Specific(paths).parse()
@@ -331,6 +319,15 @@ impl<'a> ConfigBase<'a> {
             palette,
             palettes,
         })
+    }
+}
+
+impl<'a> PaletteOrFile<'a> {
+    pub fn parse(self) -> Result<PaletteBase<'a>> {
+        match self {
+            Self::File(path) => load_config::<PaletteBase>(path),
+            Self::Palette(colors) => Ok(colors),
+        }
     }
 }
 

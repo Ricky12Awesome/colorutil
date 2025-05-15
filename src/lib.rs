@@ -4,7 +4,6 @@ use thiserror::Error;
 
 pub mod color;
 pub mod config;
-pub mod parse;
 
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
