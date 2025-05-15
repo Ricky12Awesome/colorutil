@@ -10,6 +10,7 @@ inherits = ["d", "c", "b", "a"]
 
 [palettes.all.colors]
 r = "#FF0000"
+r2 = "$r"
 
 [palettes.a]
 inherits = ["b"]

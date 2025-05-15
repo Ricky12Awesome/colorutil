@@ -1,9 +1,9 @@
+use crate::config::Palette;
 use crate::{Error, Result};
 use itertools::Itertools;
 use palette::rgb::{Rgb, Rgba};
 use palette::{Hsl, Hsla, Hsv, Hsva, IntoColor, Srgb, Srgba, WithAlpha};
 use std::str::FromStr;
-use crate::config::Palette;
 
 macro_rules! impl_color {
     ($format:ty) => {
@@ -120,10 +120,8 @@ impl_color!(Hsla);
 impl_color!(Hsv);
 impl_color!(Hsva);
 
-impl FromStr for Color {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl Color {
+    fn from_str(s: &str, palette: &Palette) -> Result<Self, Error> {
         impl_match_color!(s,
             "argb": from_argb<u8, 4>,
             "rgba": from_rgba<u8, 4>,
@@ -144,12 +142,20 @@ impl FromStr for Color {
                 .or_else(|_| Rgb::from_str(s).map(Into::into))
                 .map_err(|_| Error::FailedToParseColor(s.to_owned()))?;
 
-            return Ok(Color::Rgba(rgba.into()));
+            return Ok(Self::Rgba(rgba.into()));
+        }
+
+        if s.starts_with('$') {
+            let s = palette
+                .get(s.trim_start_matches('$'))
+                .ok_or_else(|| Error::FailedToParseColor(s.to_owned()))?;
+
+            return Self::from_str(s, palette);
         }
 
         palette::named::from_str(s)
             .map(Srgb::into)
-            .map(Color::Srgb)
+            .map(Self::Srgb)
             .ok_or_else(|| Error::FailedToParseColor(s.to_owned()))
     }
 }
@@ -173,8 +179,8 @@ pub fn parse_params<T: FromStr, const N: usize>(text: &str) -> Result<[T; N]> {
     Ok(result)
 }
 
-pub fn parse_format<'a>(src_color: &'a str, format: &'a str) -> Result<String> {
-    let color = src_color.parse::<Color>()?;
+pub fn parse_format<'a>(src_color: &'a str, format: &'a str, palette: &Palette) -> Result<String> {
+    let color = Color::from_str(src_color, palette)?;
 
     color.to_format(format)
 }
@@ -208,7 +214,7 @@ pub fn parse_text(
             .get(name)
             .ok_or_else(|| Error::FailedToGetColor(value.to_owned()))?;
 
-        let color = parse_format(color, format)?;
+        let color = parse_format(color, format, palette)?;
 
         dst.push_str(&src[offset..start]);
         dst.push_str(&color);
